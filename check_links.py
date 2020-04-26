@@ -1,19 +1,19 @@
 import argparse
 import csv
-import os
 import uuid
-import time
-import sys
 import requests
 import urllib3
 from datetime import datetime
 from random import choice
 from tqdm import tqdm
-from PyQt5 import QtNetwork
-from PyQt5.QtCore import *
-from PyQt5.QtGui import *
-from PyQt5.QtWebKitWidgets import QWebView
-from PyQt5.QtWidgets import QApplication
+# Optional module
+has_pyqt5 = True
+try:
+    from screenshot import Screenshot
+except ImportError:
+    has_pyqt5 = False
+    pass
+
 
 desktop_agents = [
     'Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/54.0.2840.99 Safari/537.36',
@@ -77,6 +77,7 @@ parser.add_argument("--fields", type=str, action='append',
                     help='Fields to output to csv file (default: http_code elapsed datetime)', nargs="*")
 parser.add_argument("--csv_link_position", type=int, help="The position of the link in the csv file", required=True)
 parser.add_argument("--csv_field_delimiter", type=str, default=",", help='Delimiter for the CSV fields (default: ",")')
+parser.add_argument("--csv_noquote", default=False, type=bool, help="If the csv link field has no quoting")
 parser.add_argument("--take_screenshot", default=False, type=bool, help="Runs a second request and saves a screenshot")
 
 args = parser.parse_args()
@@ -89,54 +90,6 @@ proxy_type = None
 def random_headers():
     return {'User-Agent': choice(desktop_agents),
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8'}
-
-
-''' 
-Credit for this class: 
-    Author: Richard Penman
-    Bitbucket: https://bitbucket.org/richardpenman/scripts/src/default/webkit_screenshot.py
-'''
-
-
-class Screenshot(QWebView):
-    def __init__(self):
-        global proxy_type, proxy_addr, proxy_port
-        self.app = QApplication(sys.argv)
-        QWebView.__init__(self)
-        self._loaded = False
-        self.loadFinished.connect(self._loadFinished)
-        # Sets the proxy if any
-        if proxy_addr and proxy_port and proxy_type:
-            proxy = QtNetwork.QNetworkProxy()
-            if proxy_type == "http":
-                proxy.setType(QtNetwork.QNetworkProxy.HttpProxy)
-            elif proxy_type == "socks5":
-                proxy.setType(QtNetwork.QNetworkProxy.Socks5Proxy)
-            proxy.setHostName(proxy_addr)
-            proxy.setPort(int(proxy_port))
-            QtNetwork.QNetworkProxy.setApplicationProxy(proxy)
-        if not os.path.exists("./screenshots"):
-            os.makedirs("./screenshots")
-
-    def capture(self, url, output_file):
-        self.load(QUrl(url))
-        self.wait_load()
-        frame = self.page().mainFrame()
-        self.page().setViewportSize(frame.contentsSize())
-        image = QImage(self.page().viewportSize(), QImage.Format_ARGB32)
-        painter = QPainter(image)
-        frame.render(painter)
-        painter.end()
-        image.save("{}/{}".format("./screenshots", output_file))
-
-    def wait_load(self, delay=0):
-        while not self._loaded:
-            self.app.processEvents()
-            time.sleep(delay)
-        self._loaded = False
-
-    def _loadFinished(self, result):
-        self._loaded = True
 
 
 def parse_proxy(proxy):
@@ -199,18 +152,28 @@ def check_links():
             proxy_secure = "{}s://{}:{}".format(proxy_type, proxy_addr, proxy_port)
             proxies = {'http': proxy, 'https': proxy_secure}
 
+    # Handle the optional screenshot feature
+    take_screen = False
+    if args.take_screenshot:
+        if has_pyqt5:
+            take_screen = True
+            sc = Screenshot(proxy_type, proxy_addr, proxy_port)
+        else:
+            print("Warning: PyQt5 dependencies are not met, you are not able to run this script with --take_screenshot")
+            return
+
     # Browse the input csv file, store everything in an array
     input_links = []
     with open(args.input) as f:
-        csv_reader = csv.reader(f, delimiter=field_delim, quoting=csv.QUOTE_NONNUMERIC)
+        quoting = csv.QUOTE_ALL
+        if args.csv_noquote:
+            quoting = csv.QUOTE_NONE
+        csv_reader = csv.reader(f, delimiter=field_delim, quoting=quoting)
         for line in csv_reader:
             input_links.append(line)
 
     # Loop the array, write the result to output
     bar_len = len(input_links)
-
-    if args.take_screenshot:
-        sc = Screenshot()
 
     with requests.Session() as s:
         s.proxies = proxies
@@ -247,7 +210,7 @@ def check_links():
                         i.append(str(ret.elapsed))
                         i.append(str(datetime.now()))
 
-                    if args.take_screenshot:
+                    if take_screen:
                         if ret.status_code < 400:
                             sc_name = uuid.uuid4()
                             try:
@@ -280,7 +243,7 @@ def check_links():
                         i.append("")
 
                 with open(output, 'a', newline='') as csv_file:
-                    csv_writer = csv.writer(csv_file, delimiter=field_delim, quoting=csv.QUOTE_NONNUMERIC)
+                    csv_writer = csv.writer(csv_file, delimiter=field_delim, quoting=csv.QUOTE_ALL)
                     csv_writer.writerow(i)
 
                 progress_bar.update()
