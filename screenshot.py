@@ -1,6 +1,8 @@
+import argparse
 import sys
 import os
 import time
+import uuid
 
 from PyQt5 import QtNetwork
 from PyQt5.QtCore import *
@@ -8,6 +10,11 @@ from PyQt5.QtGui import *
 from PyQt5.QtWebKitWidgets import QWebView
 from PyQt5.QtWidgets import QApplication
 
+parser = argparse.ArgumentParser()
+parser.add_argument("url", type=str, help="Specify the url to screenshot")
+parser.add_argument("--proxy_type", default=None, type=str, help="Specify a proxy type (http or socks5)")
+parser.add_argument("--proxy_addr", default=None, type=str, help="Specify the proxy address")
+parser.add_argument("--proxy_port", default=None, type=str, help="Specify the proxy port")
 
 ''' 
 Credit for this class: 
@@ -54,3 +61,14 @@ class Screenshot(QWebView):
 
     def _loadFinished(self, result):
         self._loaded = True
+
+
+if __name__ == "__main__":
+    try:
+        args = parser.parse_args()
+        name = uuid.uuid4()
+        sc = Screenshot(args.proxy_type, args.proxy_addr, args.proxy_port)
+        sc.capture(args.url, "{}.png".format(name))
+        print(name)
+    except:
+        print("error")

@@ -43,7 +43,14 @@ The output will contain the same information as the input, but the following col
 You can chose to add/remove or re-order any of these columns by setting `--fields` when you run the script.
 
 Please note that the output file is appended at each execution. This has a main advantage: you can re-run the script on the same
-input files many times. You are then able to compare statuses and execution times at different times. 
+input files many times. You are then able to compare statuses and execution times at different times.
+
+### Multi-processing behaviour
+
+By default, the script will run with the parameter `mp_units = cpu_count() - 1`. It means if you have a machine with 4 cores,
+it will try to check 3 web pages in parallel. You can force `mp_units` to any value but it is recommended to leave to default.
+
+You may want to set it to 1 to run all requests sequentially (disabling multi-processing feature).
 
 ### Examples
 
@@ -77,12 +84,18 @@ One usage would be for instance if you want to use this script on the Tor networ
 If you specify `--take_screenshot True` at runtime, the script will create a "screenshots" directory, and for each website checked
 it will run a second request and store a screenshot of it. A unique id is appended to the csv line that will refer to the name of the png file created.
 
-This feature is likely to double the execution time of the whole script.
-
 To be able to use this feature, you need some PyQt5 additional modules that can be installed this way on Linux Debian:
 ```
 apt-get install python3-pyqt5
 apt-get install python3-pyqt5.qtwebkit
+```
+
+This feature has been completely outsourced to another script (`screenshot.py`) because QtApplication doesn't like to be called
+outside of a main. This means of course you can call it independently from `check_links.py` if you want:
+```
+usage: screenshot.py [-h] [--proxy_type PROXY_TYPE] [--proxy_addr PROXY_ADDR]
+                     [--proxy_port PROXY_PORT]
+                     url
 ```
 
 **Warning: be very careful when using this feature, even for testing purposes. You might end up storing screenshots of
